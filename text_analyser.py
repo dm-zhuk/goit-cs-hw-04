@@ -3,7 +3,7 @@ import time
 import logging
 
 from threading import Thread
-from multiprocessing import Process, JoinableQueue
+from multiprocessing import Process, Queue
 from typing import Dict, List
 
 # Логування
@@ -26,6 +26,7 @@ KEYWORDS = [
     "spawn",
     "children",
     "task",
+    "python",  # додано для показу kw без збігів
 ]
 FILES = [f"file{i}.txt" for i in range(1, NUM_FILES + 1)]
 
@@ -33,13 +34,13 @@ FILES = [f"file{i}.txt" for i in range(1, NUM_FILES + 1)]
 # Створення файлів
 def create_test_files():
     content = [
-        "It is a simplified queue type, very close to a locked pipe.",
+        "It is a simplified Queue type, very close to a locked Pipe.",
         "Join the background thread.",
         "Indicate that no more data will be put on this queue by the current process.",
         "It blocks at most timeout seconds.",
         "No keywords here.",
         "Return the approximate size of the queue.",
-        "This class requires a functioning shared semaphore implementation",
+        "This class requires a functioning shared Semaphore implementation",
         "Indicate that a formerly enqueued task is complete.",
         "Return list of all live children of the current process.",
         "The possible start methods are 'fork', 'spawn' and 'forkserver'.",
@@ -101,18 +102,17 @@ def threading_search(file_chunks: List[List[str]]) -> Dict[str, List[str]]:
 
 
 # Multiprocessing
-def process_worker(chunk: List[str], queue: JoinableQueue):
+def process_worker(chunk: List[str], queue: Queue):
     local_res = {kw: [] for kw in KEYWORDS}
     for file in chunk:
         res = search_in_file(file, KEYWORDS)
         for kw, files in res.items():
             local_res[kw].extend(files)
     queue.put(local_res)
-    queue.task_done()
 
 
 def multiprocessing_search(file_chunks: List[List[str]]) -> Dict[str, List[str]]:
-    queue = JoinableQueue()
+    queue = Queue()
     processes = []
 
     for chunk in file_chunks:
@@ -120,14 +120,12 @@ def multiprocessing_search(file_chunks: List[List[str]]) -> Dict[str, List[str]]
         processes.append(p)
         p.start()
 
-    queue.join()
+    for p in processes:
+        p.join()
 
     results = []
     for _ in processes:
         results.append(queue.get())
-
-    for p in processes:
-        p.join()
 
     return merge_results(results)
 
@@ -172,13 +170,13 @@ if __name__ == "__main__":
 
 # Результати виконання
 """
-[00:15:53] [MainThread/MainProcess] Тестові файли створено.
-[00:15:53] [MainThread/MainProcess] === Threading ===
-[00:15:53] [MainThread/MainProcess] Час виконання: 0.0022 сек
-[00:15:53] [MainThread/MainProcess] {'queue': ['file1.txt', 'file3.txt', 'file6.txt', 'file8.txt'], 'timeout': ['file4.txt'], 'process': ['file3.txt', 'file9.txt'], 'thread': ['file2.txt'], 'pipe': ['file1.txt'], 'semaphore': ['file7.txt'], 'spawn': ['file10.txt'], 'children': ['file9.txt'], 'task': ['file8.txt']}
+[20:53:37] [MainThread/MainProcess] Тестові файли створено.
 
-[00:15:53] [MainThread/MainProcess]
-[00:15:53] [MainThread/MainProcess] === Multiprocessing ===
-[00:15:54] [MainThread/MainProcess] Час виконання: 0.2612 сек
-[00:15:54] [MainThread/MainProcess] {'queue': ['file1.txt', 'file3.txt', 'file6.txt', 'file8.txt'], 'timeout': ['file4.txt'], 'process': ['file3.txt', 'file9.txt'], 'thread': ['file2.txt'], 'pipe': ['file1.txt'], 'semaphore': ['file7.txt'], 'spawn': ['file10.txt'], 'children': ['file9.txt'], 'task': ['file8.txt']}
+=== Threading ===
+[20:53:37] [MainThread/MainProcess] Час виконання: 0.0020 сек
+[20:53:37] [MainThread/MainProcess] {'queue': ['file1.txt', 'file3.txt', 'file6.txt', 'file8.txt'], 'timeout': ['file4.txt'], 'process': ['file3.txt', 'file9.txt'], 'thread': ['file2.txt'], 'pipe': ['file1.txt'], 'semaphore': ['file7.txt'], 'spawn': ['file10.txt'], 'children': ['file9.txt'], 'task': ['file8.txt'], 'python': []}
+
+=== Multiprocessing ===
+[20:53:37] [MainThread/MainProcess] Час виконання: 0.2190 сек
+[20:53:37] [MainThread/MainProcess] {'queue': ['file1.txt', 'file3.txt', 'file6.txt', 'file8.txt'], 'timeout': ['file4.txt'], 'process': ['file3.txt', 'file9.txt'], 'thread': ['file2.txt'], 'pipe': ['file1.txt'], 'semaphore': ['file7.txt'], 'spawn': ['file10.txt'], 'children': ['file9.txt'], 'task': ['file8.txt'], 'python': []}
 """
